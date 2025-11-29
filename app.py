@@ -3,6 +3,8 @@ import os
 import psycopg2
 from db_setup import get_connection
 from fastapi import FastAPI, HTTPException
+from pydantic import BaseModel
+from db import get_items
 
 app = FastAPI()
 
@@ -20,11 +22,11 @@ but will have different HTTP-verbs.
 
 
 # INSPIRATION FOR A LIST-ENDPOINT - Not necessary to use pydantic models, but we could to ascertain that we return the correct values
-# @app.get("/items/")
-# def read_items():
-#     con = get_connection()
-#     items = get_items(con)
-#     return {"items": items}
+@app.get("/items/")
+def read_items():
+    con = get_connection()
+    items = get_items(con)
+    return {"items": items}
 
 
 # INSPIRATION FOR A POST-ENDPOINT, uses a pydantic model to validate
@@ -36,3 +38,20 @@ but will have different HTTP-verbs.
 
 
 # IMPLEMENT THE ACTUAL ENDPOINTS! Feel free to remove
+
+
+class House(BaseModel):
+    name: str
+    price: int
+    description: str
+
+
+@app.get("/")
+def root():
+    return {"Hello": "World"}
+
+
+@app.get("/houses/")
+def houses():
+    houses = get_items(get_connection())
+    return {"houses": houses}
