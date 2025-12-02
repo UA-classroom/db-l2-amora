@@ -1,10 +1,10 @@
 import os
 
 import psycopg2
+from db import get_items, get_users, get_agencies, get_brokers
 from db_setup import get_connection
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
-from db import get_items
 
 app = FastAPI()
 
@@ -22,11 +22,11 @@ but will have different HTTP-verbs.
 
 
 # INSPIRATION FOR A LIST-ENDPOINT - Not necessary to use pydantic models, but we could to ascertain that we return the correct values
-@app.get("/items/")
-def read_items():
-    con = get_connection()
-    items = get_items(con)
-    return {"items": items}
+# @app.get("/items/")
+# def read_items():
+#     con = get_connection()
+#     items = get_items(con)
+#     return {"items": items}
 
 
 # INSPIRATION FOR A POST-ENDPOINT, uses a pydantic model to validate
@@ -55,3 +55,18 @@ def root():
 def houses():
     houses = get_items(get_connection())
     return {"houses": houses}
+
+@app.get("/users/")
+def users():
+    users = get_users(get_connection())
+    return {"Users": users}
+
+@app.get("/agencies/")
+def agencies():
+    agencies = get_agencies(get_connection())
+    return {"Agencies": agencies}
+
+@app.get("/brokers/")
+def brokers():
+    brokers = get_brokers(get_connection())
+    return {"Brokers": brokers}

@@ -26,6 +26,27 @@ def get_items(con):
             items = cursor.fetchall()
     return items
 
+def get_users(con):
+    with con:
+        with con.cursor(cursor_factory=RealDictCursor) as cursor:
+            cursor.execute("SELECT * FROM users;")
+            users = cursor.fetchall()
+    return users
+
+def get_agencies(con):
+    with con:
+        with con.cursor(cursor_factory=RealDictCursor) as cursor:
+            cursor.execute("SELECT * FROM agencies;")
+            agencies = cursor.fetchall()
+    return agencies
+
+def get_brokers(con):
+    with con:
+        with con.cursor(cursor_factory=RealDictCursor) as cursor:
+            cursor.execute("SELECT * FROM brokers;")
+            brokers = cursor.fetchall()
+    return brokers
+
 
 ### THIS IS JUST INSPIRATION FOR A DETAIL OPERATION (FETCHING ONE ENTRY)
 # def get_item(con, item_id):
