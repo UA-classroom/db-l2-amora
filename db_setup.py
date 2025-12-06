@@ -27,13 +27,13 @@ def get_connection():
 
 def create_tables():
     """
-    A function to create the necessary tables for the project.
+    A function to create the necessary tables for the project. 
     """
     try:
         connection = get_connection()
         cursor = connection.cursor()
 
-        cursor.execute("""CREATE TABLE users (
+        cursor.execute(""" --sql CREATE TABLE users (
         id SERIAL PRIMARY KEY,
         full_name VARCHAR(100) NOT NULL,
         email VARCHAR(100) NOT NULL, 
@@ -46,13 +46,13 @@ def create_tables():
 
         cursor.execute("""CREATE TABLE properties (
         id SERIAL PRIMARY KEY,
+        user_id INT REFERENCES users(id) ON DELETE RESTRICT,
         title VARCHAR(100) NOT NULL,
         description TEXT NOT NULL,
         property_type VARCHAR(100) NOT NULL,
         listing_type VARCHAR(100) NOT NULL,
         start_price INT NOT NULL,
-        end_price INT NOT NULL,
-        price_per_sqr_meter INT NOT NULL,
+        end_price INT,
         status VARCHAR(100) DEFAULT 'Active' NOT NULL,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )""")
