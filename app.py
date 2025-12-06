@@ -1,8 +1,10 @@
 import os
 
 import psycopg2
+from db import get_users, get_user_by_id, add_user, delete_user, edit_user, get_properties, get_property_by_id
 from db_setup import get_connection
 from fastapi import FastAPI, HTTPException
+from pydantic import BaseModel
 
 app = FastAPI()
 
@@ -36,3 +38,53 @@ but will have different HTTP-verbs.
 
 
 # IMPLEMENT THE ACTUAL ENDPOINTS! Feel free to remove
+
+
+class House(BaseModel):
+    name: str
+    price: int
+    description: str
+
+
+@app.get("/users/")
+def users():
+    conn = get_connection()
+    users = get_users(conn)
+    return {"users": users}
+
+@app.get("/user/{user_id}")
+def user(user_id: int):
+    conn = get_connection()
+    user = get_user_by_id(conn, user_id)
+    return {"user": user}
+
+@app.post("/user/")
+def create_user(user: dict):
+    conn = get_connection()
+    user_id = add_user(conn, user)
+    return {"user_id": user_id}
+
+@app.get("/properties/")
+def properties():
+    properties = get_properties(get_connection())
+    return {"properties": properties}
+
+@app.get("/property/{property_id}")
+def property(property_id: int):
+    property = get_property_by_id(get_connection(), property_id)
+    return {"property": property}
+
+# @app.get("/users/")
+# def users():
+#     users = get_users(get_connection())
+#     return {"Users": users}
+
+# @app.get("/agencies/")
+# def agencies():
+#     agencies = get_agencies(get_connection())
+#     return {"Agencies": agencies}
+
+# @app.get("/brokers/")
+# def brokers():
+#     brokers = get_brokers(get_connection())
+#     return {"Brokers": brokers}
