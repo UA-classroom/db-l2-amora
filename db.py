@@ -1,3 +1,5 @@
+from tkinter import N
+from httpx import get
 import psycopg2
 from fastapi import HTTPException
 from psycopg2.extras import RealDictCursor
@@ -26,17 +28,17 @@ def get_users(conn):
     with conn:
         with conn.cursor(cursor_factory=RealDictCursor) as cursor:
             cursor.execute("""SELECT 
-                        full_name, email, phone_number, profile_picture, role, created_at
+                        id, full_name, email, phone_number, profile_picture, role, created_at
                         FROM users;""")
             users = cursor.fetchall()
     return users
 
 
-def get_user_by_id(conn, user_id):
+def get_user(conn, user_id):
     with conn:
         with conn.cursor(cursor_factory=RealDictCursor) as cursor:
             cursor.execute("""SELECT 
-                        full_name, email, phone_number, profile_picture, role, created_at
+                        id, full_name, email, phone_number, profile_picture, role, created_at
                         FROM users 
                         WHERE id = %s;""", (user_id,))
             user = cursor.fetchone()
@@ -50,7 +52,7 @@ def add_user(conn, user):
         with conn.cursor(cursor_factory=RealDictCursor) as cursor:
             cursor.execute(
                 """
-                INSERT INTO users (full_name, email, profile_picture, phone_number, password, role,) 
+                INSERT INTO users (full_name, email, profile_picture, phone_number, password, role) 
                 VALUES (%s, %s, %s, %s, %s, %s) 
                 RETURNING id;
             """,
@@ -63,47 +65,51 @@ def add_user(conn, user):
                     user.role,
                 ),
             )
-            user_id = cursor.fetchone()["id"]
-    return user_id
+            user = cursor.fetchone()
+    return get_user(conn, user["id"])
 
 
 def edit_user(conn, user_id, user):
     with conn:
         with conn.cursor(cursor_factory=RealDictCursor) as cursor:
-            cursor.execute(
-                """
+            updates = []
+            values = []
+            
+            if user.full_name is not None:
+                updates.append("full_name = %s")
+                values.append(user.full_name)
+            if user.email is not None:
+                updates.append("email = %s")
+                values.append(user.email)
+            if user.phone_number is not None:
+                updates.append("phone_number = %s")
+                values.append(user.phone_number)
+            if user.profile_picture is not None:
+                updates.append("profile_picture = %s")
+                values.append(user.profile_picture)
+                
+            if not updates:
+                return None  # No updates to perform
+        
+            values.append(user_id)
+            
+            cursor.execute(f"""
                 UPDATE users 
-                SET full_name = %s, email = %s, profile_picture = %s, phone_number = %s, password = %s, role = %s 
-                WHERE id = %s;
-            """,
-                (
-                    user.full_name,
-                    user.email,
-                    user.profile_picture,
-                    user.phone_number,
-                    user.password,
-                    user.role,
-                    user_id,
-                ),
-            )
-            user_id = cursor.fetchone()["id"]
-            if not user_id:
-                raise HTTPException(status_code=404, detail="User not found")
-    return user_id
+                SET {', '.join(updates)}
+                WHERE id = %s
+                RETURNING id
+            """, values)
+            return cursor.fetchone()
 
 
 def delete_user(conn, user_id):
     with conn:
         with conn.cursor(cursor_factory=RealDictCursor) as cursor:
-            cursor.execute("DELETE FROM users WHERE id = %s;", (user_id,))
-            if not user_id:
-                raise HTTPException(status_code=404, detail="User not found")
-    return True
+            cursor.execute("""DELETE FROM users WHERE id = %s RETURNING id""", (user_id,))
+            return cursor.fetchone()
 
 
 # PROPERTIES
-
-
 def get_properties(conn):
     with conn:
         with conn.cursor(cursor_factory=RealDictCursor) as cursor:
@@ -138,7 +144,7 @@ def get_properties(conn):
     FROM properties p
     JOIN features f ON p.id = f.property_id
     JOIN location loc ON p.id = loc.property_id
-    LEFT JOIN listing l ON p.id = l.property_id
+    JOIN listing l ON p.id = l.property_id
     LEFT JOIN users u ON l.user_id = u.id
     LEFT JOIN brokers b ON l.broker_id = b.user_id
     LEFT JOIN users b_user ON b.user_id = b_user.id
@@ -201,61 +207,96 @@ def get_property_by_id(conn, property_id):
     return property
 
 
-# def add_property(conn, property):
-#     with conn:
-#         with conn.cursor(cursor_factory=RealDictCursor) as cursor:
-#             cursor.execute(
-#                 """
-#                 INSERT INTO properties (user_id, title, description, property_type, listing_type, start_price, status) 
-#                 VALUES (%s, %s, %s, %s, %s, %s) 
-#                 RETURNING id;
-#             """,
-#                 (
-#                     property.user_id,
-#                     property.title,
-#                     property.description,
-#                     property.property_type,
-#                     property.listing_type,
-#                     property.start_price,
-#                     property.status,
-#                 ),
-#                 """
-#                 INSERT INTO features (property_id, feature_id) 
-#                 VALUES (%s, %s);
-#             """,
-#                 (
-#                     property_id,
-#                     feature_id,
-#                 ),
-#                 """
-#                 INSERT INTO location (property_id, country, city, address) 
-#                 VALUES (%s, %s, %s, %s);
-#             """,
-#                 (
-#                     property_id,
-#                     country,
-#                     city,
-#                     address,
-#                 ),
-#                 """
-#                 INSERT INTO images (property_id, image_url) 
-#                 VALUES (%s, %s);
-#             """,
-#                 (
-#                     property_id,
-#                     image_url,
-#                 ),
-#                 """
-#                 INSERT INTO videos (property_id, video_url) 
-#                 VALUES (%s, %s);
-#             """,
-#                 (
-#                     property_id,
-#                     video_url,
-#                 ),
-#             )
-#             property_id = cursor.fetchone()["id"]
-#     return property_id
+def add_property(conn, property, features, location, images, videos):
+    with conn:
+        with conn.cursor(cursor_factory=RealDictCursor) as cursor:
+            cursor.execute(
+                """
+                INSERT INTO properties (user_id, title, description, property_type, listing_type, start_price, status) 
+                VALUES (%s, %s, %s, %s, %s, %s, %s)
+                RETURNING id;
+                """,
+                (
+                    property.user_id,
+                    property.title,
+                    property.description,
+                    property.property_type,
+                    property.listing_type,
+                    property.start_price,
+                    property.status
+                ))
+            property_id = cursor.fetchone()["id"]
+            if not property_id:
+                raise HTTPException(status_code=404, detail="Property is not created")
+            
+            cursor.execute(
+                """
+                INSERT INTO FEATURES (property_id, rooms, bathrooms, size_sqm, floor, year_built, year_renovated,
+                monthly_rent, total_floors, has_garden, garden_size_sqm, has_elevator, has_garage, has_parking, has_pool, has_balcony, energy_class) 
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                """,
+                (
+                    property_id,
+                    features.rooms,
+                    features.bathrooms,
+                    features.size_sqm,
+                    features.floor,
+                    features.year_built,
+                    features.year_renovated,
+                    features.monthly_rent,
+                    features.total_floors,
+                    features.has_garden,
+                    features.garden_size_sqm,
+                    features.has_elevator,
+                    features.has_garage,
+                    features.has_parking,
+                    features.has_pool,
+                    features.has_balcony,
+                    features.energy_class
+                ))
+            
+            cursor.execute( """
+                INSERT INTO location (property_id, address, city, zip_code, county, state, country, latitude, longitude, map_url) 
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                """,
+                (
+                    property_id,
+                    location.address,
+                    location.city,
+                    location.zip_code,
+                    location.county,
+                    location.state,
+                    location.country,
+                    location.latitude,
+                    location.longitude,
+                    location.map_url
+                ))
+            
+            for image in images:
+                cursor.execute(
+                    """
+                    INSERT INTO property_images (property_id, image_url, image_order) 
+                    VALUES (%s, %s, %s)
+                    """,
+                    (
+                        property_id,
+                        image.image_url,
+                        image.image_order
+                    ))
+            
+            for video in videos:
+                cursor.execute(
+                    """
+                    INSERT INTO property_videos (property_id, video_url, video_order) 
+                    VALUES (%s, %s, %s)
+                    """,
+                    (
+                        property_id,
+                        video.video_url,
+                        video.video_order,
+                    ))
+            
+    return get_property_by_id(conn, property_id)
 
 
 # def edit_property(conn, property_id, property):

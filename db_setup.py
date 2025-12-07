@@ -88,7 +88,7 @@ def create_tables():
         country VARCHAR(100) NOT NULL,
         latitude DECIMAL (10, 8) NOT NULL,
         longitude DECIMAL (10, 8) NOT NULL,
-        map_url VARCHAR(100) NOT NULL,
+        map_url VARCHAR(100),
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )""")
 

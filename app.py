@@ -1,10 +1,29 @@
 import os
+from re import U
 
 import psycopg2
-from db import get_users, get_user_by_id, add_user, delete_user, edit_user, get_properties, get_property_by_id
-from db_setup import get_connection
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
+
+from db import (
+    add_property,
+    add_user,
+    delete_user,
+    edit_user,
+    get_properties,
+    get_property_by_id,
+    get_user,
+    get_users,
+)
+from db_setup import get_connection
+from schemas import (
+    FeatureCreate,
+    PropertyCreate,
+    PropertyFullCreate,
+    PropertyUpdate,
+    UserCreate,
+    UserUpdate,
+)
 
 app = FastAPI()
 
@@ -39,13 +58,7 @@ but will have different HTTP-verbs.
 
 # IMPLEMENT THE ACTUAL ENDPOINTS! Feel free to remove
 
-
-class House(BaseModel):
-    name: str
-    price: int
-    description: str
-
-
+# implementing user endpoints
 @app.get("/users/")
 def users():
     conn = get_connection()
@@ -55,15 +68,33 @@ def users():
 @app.get("/user/{user_id}")
 def user(user_id: int):
     conn = get_connection()
-    user = get_user_by_id(conn, user_id)
+    user = get_user(conn, user_id)
     return {"user": user}
 
 @app.post("/user/")
-def create_user(user: dict):
+def create_user(user: UserCreate):
     conn = get_connection()
-    user_id = add_user(conn, user)
-    return {"user_id": user_id}
+    user = add_user(conn, user)
+    return {"user": user}
 
+@app.delete("/user/{user_id}")
+def delete_user_by_id(user_id: int):
+    conn = get_connection()
+    deleted = delete_user(conn, user_id)
+    if not deleted:
+        raise HTTPException(status_code=404, detail="User not found")
+    return {"message": f"User with id {user_id} has been deleted."}
+
+@app.put("/user/{user_id}")
+def update_user_by_id(user_id : int, user : UserUpdate):
+    conn = get_connection()
+    updated = edit_user(conn, user_id, user)
+    if not updated:
+            raise HTTPException(status_code=404, detail="user not found or nothing to update")
+    return {"message": f"User with id {user_id} has been updated."}
+
+
+# implementing property endpoints
 @app.get("/properties/")
 def properties():
     properties = get_properties(get_connection())
@@ -74,17 +105,17 @@ def property(property_id: int):
     property = get_property_by_id(get_connection(), property_id)
     return {"property": property}
 
-# @app.get("/users/")
-# def users():
-#     users = get_users(get_connection())
-#     return {"Users": users}
-
-# @app.get("/agencies/")
-# def agencies():
-#     agencies = get_agencies(get_connection())
-#     return {"Agencies": agencies}
-
-# @app.get("/brokers/")
-# def brokers():
-#     brokers = get_brokers(get_connection())
-#     return {"Brokers": brokers}
+@app.post("/property")
+def create_property(data: PropertyFullCreate):
+    conn = get_connection()
+    user = get_user(conn, data.property.user_id)
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+    try:
+        property_data = add_property(conn, data.property, data.features, data.location, data.images, data.videos)
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"ERROR: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+    return {"property": property_data}
