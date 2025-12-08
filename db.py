@@ -1,7 +1,8 @@
 from tkinter import N
-from httpx import get
+
 import psycopg2
 from fastapi import HTTPException
+from httpx import get
 from psycopg2.extras import RealDictCursor
 
 """
@@ -33,7 +34,6 @@ def get_users(conn):
             users = cursor.fetchall()
     return users
 
-
 def get_user(conn, user_id):
     with conn:
         with conn.cursor(cursor_factory=RealDictCursor) as cursor:
@@ -45,7 +45,6 @@ def get_user(conn, user_id):
             if not user:
                 raise HTTPException(status_code=404, detail="User not found")
     return user
-
 
 def add_user(conn, user):
     with conn:
@@ -67,7 +66,6 @@ def add_user(conn, user):
             )
             user = cursor.fetchone()
     return get_user(conn, user["id"])
-
 
 def edit_user(conn, user_id, user):
     with conn:
@@ -101,13 +99,11 @@ def edit_user(conn, user_id, user):
             """, values)
             return cursor.fetchone()
 
-
 def delete_user(conn, user_id):
     with conn:
         with conn.cursor(cursor_factory=RealDictCursor) as cursor:
             cursor.execute("""DELETE FROM users WHERE id = %s RETURNING id""", (user_id,))
             return cursor.fetchone()
-
 
 # PROPERTIES
 def get_properties(conn):
@@ -115,7 +111,7 @@ def get_properties(conn):
         with conn.cursor(cursor_factory=RealDictCursor) as cursor:
             cursor.execute(""" 
     SELECT 
-        p.id, p.title, p.description, p.property_type, p.start_price, p.status,
+        p.id, p.title, p.description, p.property_type, p.listing_type, p.start_price, p.status,
         f.rooms, f.bathrooms, f.size_sqm, f.floor, f.year_built, 
         f.monthly_rent, f.total_floors, f.has_garden, f.has_parking, 
         f.has_pool, f.has_balcony, f.energy_class,
@@ -144,7 +140,7 @@ def get_properties(conn):
     FROM properties p
     JOIN features f ON p.id = f.property_id
     JOIN location loc ON p.id = loc.property_id
-    JOIN listing l ON p.id = l.property_id
+    LEFT JOIN listing l ON p.id = l.property_id
     LEFT JOIN users u ON l.user_id = u.id
     LEFT JOIN brokers b ON l.broker_id = b.user_id
     LEFT JOIN users b_user ON b.user_id = b_user.id
@@ -155,14 +151,13 @@ def get_properties(conn):
             properties = cursor.fetchall()
     return properties
 
-
 def get_property_by_id(conn, property_id):
     with conn:
         with conn.cursor(cursor_factory=RealDictCursor) as cursor:
             cursor.execute(
                 """
                 SELECT
-                p.id, p.title, p.description, p.property_type, p.start_price, p.status,
+                p.id, p.title, p.description, p.property_type, p.listing_type, p.start_price, p.status,
                 f.rooms, f.bathrooms, f.size_sqm, f.floor, f.year_built, 
                 f.monthly_rent, f.total_floors, f.has_garden, f.has_parking, 
                 f.has_pool, f.has_balcony, f.energy_class,
@@ -192,7 +187,7 @@ def get_property_by_id(conn, property_id):
             JOIN features f ON p.id = f.property_id
             JOIN location loc ON p.id = loc.property_id
             LEFT JOIN listing l ON p.id = l.property_id
-            LEFT JOIN users u ON l.user_id = u.id
+            LEFT JOIN users u ON p.user_id = u.id
             LEFT JOIN brokers b ON l.broker_id = b.user_id
             LEFT JOIN users b_user ON b.user_id = b_user.id
             LEFT JOIN agencies a ON b.agency_id = a.id
@@ -205,7 +200,6 @@ def get_property_by_id(conn, property_id):
             if not property:
                 raise HTTPException(status_code=404, detail="Property not found")
     return property
-
 
 def add_property(conn, property, features, location, images, videos):
     with conn:
@@ -298,78 +292,155 @@ def add_property(conn, property, features, location, images, videos):
             
     return get_property_by_id(conn, property_id)
 
+def edit_property(conn, property_id, property):
+    with conn:
+        with conn.cursor(cursor_factory = RealDictCursor) as cursor:
+            updates = []
+            values = []
+            if property.user_id is not None:
+                updates.append("user_id = %s")
+                values.append(property.user_id)
+            if property.title is not None:
+                updates.append("title = %s")
+                values.append(property.title)    
+            if property.description is not None:
+                updates.append("description = %s")
+                values.append(property.description)   
+            if property.property_type is not None:
+                updates.append("property_type = %s")
+                values.append(property.property_type)   
+            if property.listing_type is not None:
+                updates.append("listing_type = %s")
+                values.append(property.listing_type)   
+            if property.start_price is not None:
+                updates.append("start_price = %s")
+                values.append(property.start_price)   
+            if property.status is not None:
+                updates.append("status = %s")
+                values.append(property.status)
+            if not updates:
+                return None
+            
+            values.append(property_id)
+            
+            cursor.execute(f"""UPDATE properties 
+                        SET {', '.join(updates)} 
+                        WHERE id = %s 
+                        RETURNING id """, 
+                        (values))
+            return cursor.fetchone()
 
-# def edit_property(conn, property_id, property):
-#     with conn:
-#         with conn.cursor(cursor_factory=RealDictCursor) as cursor:
-#             cursor.execute(
-#                 """
-#                 UPDATE listing 
-#                 SET title = %s, description = %s, property_type = %s, listing_type = %s, start_price = %s, status = %s 
-#                 WHERE id = %s;
-#             """,
-#                 (
-#                     property.title,
-#                     property.description,
-#                     property.property_type,
-#                     property.listing_type,
-#                     property.start_price,
-#                     property.status,
-#                     property_id,
-#                 ),
-#             )
-#             property_id = cursor.fetchone()["id"]
-#             if not property_id:
-#                 raise HTTPException(status_code=404, detail="Property not found")
-#     return property_id
+def delete_property(conn, property_id):
+    with conn:
+        with conn.cursor(cursor_factory=RealDictCursor) as cursor:
+            cursor.execute("""DELETE FROM properties WHERE id = %s RETURNING id""", (property_id,))
+            return cursor.fetchone()
+
+# Agencies
+def get_agencies(conn):
+    with conn:
+        with conn.cursor(cursor_factory=RealDictCursor) as cursor:
+            cursor.execute("""SELECT 
+                        a.id AS agency_id,
+                        a.user_id,
+                        a.organization_number, 
+                        a.history, 
+                        u.full_name AS agency_name, 
+                        u.email AS agency_email,
+                        u.phone_number AS agency_phone_number,
+                        u.profile_picture AS agency_profile_picture,
+                        u.created_at
+                        FROM agencies a
+                        JOIN users u ON a.user_id = u.id;
+                        """)
+            agencies = cursor.fetchall()
+    return agencies
+
+def get_agency(conn, agency_id):
+    with conn:
+        with conn.cursor(cursor_factory=RealDictCursor) as cursor:
+            cursor.execute("""SELECT 
+                        a.id AS agency_id,
+                        a.user_id,
+                        a.organization_number, 
+                        a.history, 
+                        u.full_name AS agency_name, 
+                        u.email AS agency_email,
+                        u.phone_number AS agency_phone_number,
+                        u.profile_picture AS agency_profile_picture,
+                        u.created_at
+                        FROM agencies a
+                        JOIN users u ON a.user_id = u.id
+                        WHERE a.id = %s;
+                        """,(agency_id,))
+            agency = cursor.fetchone()
+            if not agency:
+                raise HTTPException(status_code=404, detail="Agency not found")
+    return agency
+
+def add_agency(conn, agency):
+    with conn:
+        with conn.cursor(cursor_factory=RealDictCursor) as cursor:
+            cursor.execute("""INSERT INTO agencies (user_id, organization_number, history) 
+                        VALUES (%s, %s, %s)
+                        RETURNING id; 
+                        """,
+                        (
+                            agency.user_id,
+                            agency.organization_number,
+                            agency.history
+                        ))
+            agency = cursor.fetchone()
+    return get_agency(conn,agency["id"])
+
+def edit_agency(conn, agency_id, agency):
+    with conn:
+        with conn.cursor(cursor_factory=RealDictCursor) as cursor:
+            updates = []
+            values = []
+            if agency.user_id is not None:
+                updates.append("user_id = %s")
+                values.append(agency.user_id)
+            if agency.organization_number is not None:
+                updates.append("organization_number = %s")
+                values.append(agency.organization_number)
+            if agency.history is not None:
+                updates.append("history = %s")
+                values.append(agency.history)
+            if not updates:
+                return None
+            
+            values.append(agency_id)
+                
+            cursor.execute(F"""UPDATE agencies
+                        SET {', '.join(updates)}
+                        WHERE id = %s
+                        RETURNING id 
+                        """,
+                        (values))
+            return cursor.fetchone()
+
+def delete_agency_by_id(conn, agency_id):
+    with conn:
+        with conn.cursor(cursor_factory=RealDictCursor) as cursor:
+            cursor.execute("""DELETE FROM agencies WHERE id = %s RETURNING id""", (agency_id,))
+            return cursor.fetchone()
+
+def get_brokers(conn):
+    with conn:
+        with conn.cursor(cursor_factory=RealDictCursor) as cursor:
+            cursor.execute(
+                """SELECT 
+                b.user_id AS broker_id,
+                b.agency_id,
+                u.full_name AS broker_name,
+                u.email AS broker_email,
+                u.profile_picture,
+                b.years_of_experience, b.bio
+                FROM brokers b 
+                JOIN users u ON b.user_id = u.id;
+                """)
+            brokers = cursor.fetchall()
+    return brokers
 
 
-# def delete_property(conn, property_id):
-#     with conn:
-#         with conn.cursor(cursor_factory=RealDictCursor) as cursor:
-#             cursor.execute("DELETE FROM listing WHERE id = %s;", (property_id,))
-#             if not property_id:
-#                 raise HTTPException(status_code=404, detail="Property not found")
-#     return True
-
-
-# # FEATURES
-
-
-# def get_agencies(conn):
-#     with conn:
-#         with conn.cursor(cursor_factory=RealDictCursor) as cursor:
-#             cursor.execute("SELECT * FROM agencies;")
-#             agencies = cursor.fetchall()
-#     return agencies
-
-
-# def get_brokers(conn):
-#     with conn:
-#         with conn.cursor(cursor_factory=RealDictCursor) as cursor:
-#             cursor.execute(
-#                 "SELECT b.*, u.full_name, u.email, u.profile_picture FROM brokers b JOIN users u ON b.user_id = u.id"
-#             )
-#             brokers = cursor.fetchall()
-    # return brokers
-
-
-### THIS IS JUST INSPIRATION FOR A DETAIL OPERATION (FETCHING ONE ENTRY)
-# def get_item(conn, item_id):
-#     with conn:
-#         with conn.cursor(cursor_factory=RealDictCursor) as cursor:
-#             cursor.execute("""SELECT * FROM items WHERE id = %s""", (item_id,))
-#             item = cursor.fetchone()
-#             return item
-
-
-### THIS IS JUST INSPIRATION FOR A CREATE-OPERATION
-# def add_item(conn, title, description):
-#     with conn:
-#         with conn.cursor(cursor_factory=RealDictCursor) as cursor:
-#             cursor.execute(
-#                 "INSERT INTO items (title, description) VALUES (%s, %s) RETURNING id;",
-#                 (title, description),
-#             )
-#             item_id = cursor.fetchone()["id"]
-#     return item_id

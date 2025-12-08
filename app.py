@@ -2,23 +2,30 @@ import os
 from re import U
 
 import psycopg2
-from fastapi import FastAPI, HTTPException
-from pydantic import BaseModel
-
 from db import (
+    add_agency,
     add_property,
     add_user,
+    delete_agency_by_id,
+    delete_property,
     delete_user,
+    edit_agency,
+    edit_property,
     edit_user,
+    get_agencies,
+    get_agency,
+    get_brokers,
     get_properties,
     get_property_by_id,
     get_user,
     get_users,
 )
 from db_setup import get_connection
+from fastapi import FastAPI, HTTPException
+from pydantic import BaseModel
 from schemas import (
-    FeatureCreate,
-    PropertyCreate,
+    AgencyCreate,
+    AgencyUpdate,
     PropertyFullCreate,
     PropertyUpdate,
     UserCreate,
@@ -40,23 +47,6 @@ but will have different HTTP-verbs.
 """
 
 
-# INSPIRATION FOR A LIST-ENDPOINT - Not necessary to use pydantic models, but we could to ascertain that we return the correct values
-# @app.get("/items/")
-# def read_items():
-#     con = get_connection()
-#     items = get_items(con)
-#     return {"items": items}
-
-
-# INSPIRATION FOR A POST-ENDPOINT, uses a pydantic model to validate
-# @app.post("/validation_items/")
-# def create_item_validation(item: ItemCreate):
-#     con = get_connection()
-#     item_id = add_item_validation(con, item)
-#     return {"item_id": item_id}
-
-
-# IMPLEMENT THE ACTUAL ENDPOINTS! Feel free to remove
 
 # implementing user endpoints
 @app.get("/users/")
@@ -105,7 +95,7 @@ def property(property_id: int):
     property = get_property_by_id(get_connection(), property_id)
     return {"property": property}
 
-@app.post("/property")
+@app.post("/property/")
 def create_property(data: PropertyFullCreate):
     conn = get_connection()
     user = get_user(conn, data.property.user_id)
@@ -119,3 +109,68 @@ def create_property(data: PropertyFullCreate):
         print(f"ERROR: {e}")
         raise HTTPException(status_code=500, detail=str(e))
     return {"property": property_data}
+
+@app.put("/property/{property_id}")
+def update_property_by_id(property_id : int, property : PropertyUpdate):
+    conn = get_connection()
+    updated = edit_property(conn, property_id, property)
+    if not updated:
+        raise HTTPException(status_code=404, detail="property not found or nothing to update")
+    return {"message": f"Property with id {property_id} has been updated."}
+
+@app.delete("/property/{property_id}")
+def delete_property_by_id(property_id : int):
+    conn = get_connection()
+    deleted = delete_property(conn, property_id)
+    if not deleted:
+        raise HTTPException(status_code=404, detail="User not found")
+    return {"message": f"Property with id {property_id} has been deleted."}
+
+#implementing agencies
+
+@app.get("/agencies/")
+def agencies():
+    conn = get_connection()
+    agencies = get_agencies(conn)
+    if not agencies:
+        raise HTTPException(status_code=404, detail="No agencies found")
+    return {"agencies" : agencies}
+
+@app.get("/agency/{agency_id}")
+def agency_by_id(agency_id : int):
+    conn = get_connection()
+    agency = get_agency(conn, agency_id)
+    return {"agency" : agency}
+
+@app.post("/agency/")
+def create_agency(data : AgencyCreate):
+    conn = get_connection()
+    agency = add_agency(conn, data)
+    if not agency:
+        raise HTTPException(status_code=404, detail="agency is not added")
+    return {"agency" : agency}
+
+@app.put("/agency/{agency_id}")
+def update_agency(agency_id : int, data : AgencyUpdate):
+    conn = get_connection()
+    updated = edit_agency(conn, agency_id, data)
+    if not updated:
+        raise HTTPException(status_code=404, detail="Agency not found or nothing to update")
+    return {"message": f"Agency with id {agency_id} has been updated."}
+
+@app.delete("/agency/{agency_id}")
+def delete_agency(agency_id : int):
+    conn = get_connection()
+    deleted = delete_agency_by_id(conn, agency_id)
+    if not deleted:
+        raise HTTPException(status_code=404, detail="Agency not found")
+    return {"message": f"Agency with id {agency_id} has been deleted."}
+
+@app.get("/brokers/")
+def brokers():
+    conn = get_connection()
+    brokers = get_brokers(conn)
+    if not brokers:
+        raise HTTPException(status_code=404, detail="No brokers found")
+    return {"brokers" : brokers}
+

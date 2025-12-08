@@ -33,7 +33,7 @@ class PropertyCreate(BaseModel):
     status: str | None = 'Active'
 
 class PropertyUpdate(BaseModel):
-    user_id: int
+    user_id: int | None = None
     title: str | None = None
     description: str | None = None
     property_type: str | None = None
@@ -84,3 +84,14 @@ class PropertyFullCreate(BaseModel):
     location: LocationCreate
     images: list[imagesCreate] = []
     videos: list[vedioCreate] = []
+    
+class AgencyCreate(BaseModel):
+    user_id: int
+    organization_number: int
+    history : str
+
+class AgencyUpdate(BaseModel):
+    user_id: int 
+    organization_number: int | None = None
+    history : str | None = None
+
