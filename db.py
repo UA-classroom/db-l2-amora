@@ -433,14 +433,404 @@ def get_brokers(conn):
                 """SELECT 
                 b.user_id AS broker_id,
                 b.agency_id,
+                b.license_number,
                 u.full_name AS broker_name,
                 u.email AS broker_email,
                 u.profile_picture,
-                b.years_of_experience, b.bio
+                b.years_of_experience, b.bio, b.created_at
                 FROM brokers b 
                 JOIN users u ON b.user_id = u.id;
                 """)
             brokers = cursor.fetchall()
     return brokers
 
+def get_broker(conn, broker_id):
+    with conn:
+        with conn.cursor(cursor_factory=RealDictCursor) as cursor:
+            cursor.execute(
+                """SELECT 
+                b.user_id AS broker_id,
+                b.agency_id,
+                b.license_number,
+                u.full_name AS broker_name,
+                u.email AS broker_email,
+                u.profile_picture,
+                b.years_of_experience, b.bio,
+                b.created_at
+                FROM brokers b 
+                JOIN users u ON b.user_id = u.id
+                WHERE b.user_id = %s;
+                """, (broker_id,))
+            broker = cursor.fetchone()
+            if not broker:
+                raise HTTPException(status_code=404, detail="Broker not found")
+    return broker
 
+def add_broker(conn, broker):
+    with conn:
+        with conn.cursor(cursor_factory=RealDictCursor) as cursor:
+            cursor.execute(
+                """INSERT INTO 
+                brokers (user_id, agency_id, license_number, years_of_experience, bio) 
+                VALUES (%s, %s, %s, %s, %s)
+                RETURNING user_id;
+                """,
+                (
+                    broker.user_id,
+                    broker.agency_id,
+                    broker.license_number,
+                    broker.years_of_experience,
+                    broker.bio
+                ))
+            broker = cursor.fetchone()
+    return get_broker(conn, broker["user_id"])
+
+def edit_broker(conn, broker_id, broker):
+    with conn:
+        with conn.cursor(cursor_factory=RealDictCursor) as cursor:
+            updates = []
+            values = []
+            if broker.agency_id is not None:
+                updates.append("agency_id = %s")
+                values.append(broker.agency_id)
+            if broker.license_number is not None:
+                updates.append("license_number = %s")
+                values.append(broker.license_number)
+            if broker.years_of_experience is not None:
+                updates.append("years_of_experience = %s")
+                values.append(broker.years_of_experience)
+            if broker.bio is not None:
+                updates.append("bio = %s")
+                values.append(broker.bio)
+            if not updates:
+                return None
+            
+            values.append(broker_id)
+                
+            cursor.execute(F"""UPDATE brokers
+                        SET {', '.join(updates)}
+                        WHERE user_id = %s
+                        RETURNING user_id 
+                        """,
+                        (values))
+            return cursor.fetchone()
+
+def delete_broker_by_id(conn, broker_id):
+    with conn:
+        with conn.cursor(cursor_factory=RealDictCursor) as cursor:
+            cursor.execute("""DELETE FROM brokers WHERE user_id = %s 
+                        RETURNING user_id""", (broker_id,))
+            return cursor.fetchone()
+
+# Add more functions as needed for other database operations
+
+def list_property(conn, property_id, user_id=None, broker_id=None):
+    with conn:
+        with conn.cursor(cursor_factory=RealDictCursor) as cursor:
+            cursor.execute(
+                """INSERT INTO listing (property_id, user_id, broker_id) 
+                VALUES (%s, %s, %s)
+                RETURNING id, property_id, user_id, broker_id, start_date, end_date, listing_status;
+                """,
+                (property_id, user_id, broker_id)
+            )
+            listing = cursor.fetchone()
+    return listing
+
+def unlist_property(conn, listing_id):
+    with conn:
+        with conn.cursor(cursor_factory=RealDictCursor) as cursor:
+            cursor.execute(
+                """DELETE FROM listing 
+                WHERE id = %s
+                RETURNING id, property_id, user_id, broker_id, start_date, end_date, listing_status;
+                """,
+                (listing_id,)
+            )
+            listing = cursor.fetchone()
+    return listing
+
+def get_listings(conn):
+    with conn:
+        with conn.cursor(cursor_factory=RealDictCursor) as cursor:
+            cursor.execute(
+                """SELECT 
+                id, property_id, user_id, broker_id, start_date, end_date, listing_status
+                FROM listing;
+                """
+            )
+            listings = cursor.fetchall()
+    return listings
+
+def update_listing_status(conn, listing_id, listing_status):
+    with conn:
+        with conn.cursor(cursor_factory=RealDictCursor) as cursor:
+            cursor.execute(
+                """UPDATE listing 
+                SET listing_status = %s
+                WHERE id = %s
+                RETURNING id, property_id, user_id, broker_id, start_date, end_date, listing_status;
+                """,
+                (listing_status, listing_id)
+            )
+            listing = cursor.fetchone()
+    return listing
+
+def delete_listing(conn, listing_id):
+    with conn:
+        with conn.cursor(cursor_factory=RealDictCursor) as cursor:
+            cursor.execute(
+                """DELETE FROM listing 
+                WHERE id = %s
+                RETURNING id;
+                """,
+                (listing_id,)
+            )
+            listing = cursor.fetchone()
+    return listing
+
+def bid_on_property(conn, user_id, property_id, bid_amount):
+    with conn:
+        with conn.cursor(cursor_factory=RealDictCursor) as cursor:
+            cursor.execute(
+                """INSERT INTO bids (user_id, property_id, bid_amount) 
+                VALUES (%s, %s, %s)
+                RETURNING id, user_id, property_id, bid_amount, created_at;
+                """,
+                (user_id, property_id, bid_amount)
+            )
+            bid = cursor.fetchone()
+    return bid
+
+def get_bids_for_property(conn, property_id):
+    with conn:
+        with conn.cursor(cursor_factory=RealDictCursor) as cursor:
+            cursor.execute(
+                """SELECT 
+                id, user_id, property_id, bid_amount, created_at
+                FROM bids
+                WHERE property_id = %s;
+                """,
+                (property_id,)
+            )
+            bids = cursor.fetchall()
+    return bids
+
+def make_offer(conn, user_id, property_id, offer_amount, message, status):
+    with conn:
+        with conn.cursor(cursor_factory=RealDictCursor) as cursor:
+            cursor.execute(
+                """INSERT INTO offers (user_id, property_id, offer_amount, message, status) 
+                VALUES (%s, %s, %s, %s, %s)
+                RETURNING id, user_id, property_id, offer_amount, message, status, created_at;
+                """,
+                (user_id, property_id, offer_amount, message, status)
+            )
+            offer = cursor.fetchone()
+    return offer
+
+def get_offers_for_property(conn, property_id):
+    with conn:
+        with conn.cursor(cursor_factory=RealDictCursor) as cursor:
+            cursor.execute(
+                """SELECT 
+                id, user_id, property_id, offer_amount, message, status, created_at
+                FROM offers
+                WHERE property_id = %s;
+                """,
+                (property_id,)
+            )
+            offers = cursor.fetchall()
+    return offers
+
+def favorite_property(conn, user_id, property_id):
+    with conn:
+        with conn.cursor(cursor_factory=RealDictCursor) as cursor:
+            cursor.execute(
+                """INSERT INTO favorite_properties (user_id, property_id) 
+                VALUES (%s, %s)
+                RETURNING user_id, property_id;
+                """,
+                (user_id, property_id)
+            )
+            favorite = cursor.fetchone()
+    return favorite
+
+def get_favorite_properties(conn, user_id):
+    with conn:
+        with conn.cursor(cursor_factory=RealDictCursor) as cursor:
+            cursor.execute(
+                """SELECT 
+                user_id, property_id
+                FROM favorite_properties
+                WHERE user_id = %s;
+                """,
+                (user_id,)
+            )
+            favorites = cursor.fetchall()
+    return favorites
+
+def unfavorite_property(conn, user_id, property_id):
+    with conn:
+        with conn.cursor(cursor_factory=RealDictCursor) as cursor:
+            cursor.execute(
+                """DELETE FROM favorite_properties 
+                WHERE user_id = %s AND property_id = %s
+                RETURNING user_id, property_id;
+                """,
+                (user_id, property_id)
+            )
+            favorite = cursor.fetchone()
+    return favorite
+
+def record_price_history(conn, property_id, end_price):
+    with conn:
+        with conn.cursor(cursor_factory=RealDictCursor) as cursor:
+            cursor.execute(
+                """INSERT INTO price_history (property_id, end_price) 
+                VALUES (%s, %s)
+                RETURNING id, property_id, end_price, record_at;
+                """,
+                (property_id, end_price)
+            )
+            price_record = cursor.fetchone()
+    return price_record
+
+def get_price_history(conn, property_id):
+    with conn:
+        with conn.cursor(cursor_factory=RealDictCursor) as cursor:
+            cursor.execute(
+                """SELECT 
+                id, property_id, end_price, record_at
+                FROM price_history
+                WHERE property_id = %s;
+                """,
+                (property_id,)
+            )
+            price_history = cursor.fetchall()
+    return price_history
+
+def add_notification(conn, user_id, property_id, favorite_id, message):
+    with conn:
+        with conn.cursor(cursor_factory=RealDictCursor) as cursor:
+            cursor.execute(
+                """INSERT INTO notifications (user_id, property_id, favorite_id, message) 
+                VALUES (%s, %s, %s, %s)
+                RETURNING id, user_id, property_id, favorite_id, message, is_read, created_at;
+                """,
+                (user_id, property_id, favorite_id, message)
+            )
+            notification = cursor.fetchone()
+    return notification
+
+def get_notifications(conn, user_id):
+    with conn:
+        with conn.cursor(cursor_factory=RealDictCursor) as cursor:
+            cursor.execute(
+                """SELECT 
+                id, user_id, property_id, favorite_id, message, is_read, created_at
+                FROM notifications
+                WHERE user_id = %s;
+                """,
+                (user_id,)
+            )
+            notifications = cursor.fetchall()
+    return notifications
+
+def mark_notification_as_read(conn, notification_id):
+    with conn:
+        with conn.cursor(cursor_factory=RealDictCursor) as cursor:
+            cursor.execute(
+                """UPDATE notifications 
+                SET is_read = TRUE
+                WHERE id = %s
+                RETURNING id, user_id, property_id, favorite_id, message, is_read, created_at;
+                """,
+                (notification_id,)
+            )
+            notification = cursor.fetchone()
+    return notification
+
+def delete_notification(conn, notification_id):
+    with conn:
+        with conn.cursor(cursor_factory=RealDictCursor) as cursor:
+            cursor.execute(
+                """DELETE FROM notifications 
+                WHERE id = %s
+                RETURNING id;
+                """,
+                (notification_id,)
+            )
+            notification = cursor.fetchone()
+    return notification
+
+def get_property_views(conn, property_id):
+    with conn:
+        with conn.cursor(cursor_factory=RealDictCursor) as cursor:
+            cursor.execute(
+                """SELECT 
+                user_id, property_id, view_count, last_viewed_at
+                FROM property_views
+                WHERE property_id = %s;
+                """,
+                (property_id,)
+            )
+            views = cursor.fetchall()
+    return views
+
+def record_property_view(conn, user_id, property_id):
+    with conn:
+        with conn.cursor(cursor_factory=RealDictCursor) as cursor:
+            cursor.execute(
+                """INSERT INTO property_views (user_id, property_id, view_count, last_viewed_at) 
+                VALUES (%s, %s, 1, CURRENT_TIMESTAMP)
+                ON CONFLICT (user_id, property_id) 
+                DO UPDATE SET 
+                    view_count = property_views.view_count + 1,
+                    last_viewed_at = CURRENT_TIMESTAMP
+                RETURNING user_id, property_id, view_count, last_viewed_at;
+                """,
+                (user_id, property_id)
+            )
+            view_record = cursor.fetchone()
+    return view_record
+
+def compare_properties(conn, user_id, property_id):
+    with conn:
+        with conn.cursor(cursor_factory=RealDictCursor) as cursor:
+            cursor.execute(
+                """INSERT INTO comparison_lists (user_id, property_id) 
+                VALUES (%s, %s)
+                RETURNING user_id, property_id;
+                """,
+                (user_id, property_id)
+            )
+            comparison = cursor.fetchone()
+    return comparison
+
+def get_comparison_list(conn, user_id):
+    with conn:
+        with conn.cursor(cursor_factory=RealDictCursor) as cursor:
+            cursor.execute(
+                """SELECT 
+                user_id, property_id
+                FROM comparison_lists
+                WHERE user_id = %s;
+                """,
+                (user_id,)
+            )
+            comparison_list = cursor.fetchall()
+    return comparison_list
+
+def remove_from_comparison(conn, user_id, property_id):
+    with conn:
+        with conn.cursor(cursor_factory=RealDictCursor) as cursor:
+            cursor.execute(
+                """DELETE FROM comparison_lists 
+                WHERE user_id = %s AND property_id = %s
+                RETURNING user_id, property_id;
+                """,
+                (user_id, property_id)
+            )
+            comparison = cursor.fetchone()
+    return comparison

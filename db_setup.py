@@ -33,7 +33,7 @@ def create_tables():
         connection = get_connection()
         cursor = connection.cursor()
 
-        cursor.execute(""" --sql CREATE TABLE users (
+        cursor.execute("""CREATE TABLE users (
         id SERIAL PRIMARY KEY,
         full_name VARCHAR(100) NOT NULL,
         email VARCHAR(100) UNIQUE NOT NULL, 
@@ -117,6 +117,7 @@ def create_tables():
         cursor.execute("""CREATE TABLE brokers (
         user_id INT PRIMARY KEY REFERENCES users(id) ON DELETE RESTRICT,
         agency_id INT REFERENCES agencies(id),
+        license_number VARCHAR(100) NOT NULL,
         years_of_experience INT NOT NULL,
         bio TEXT NOT NULL,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP

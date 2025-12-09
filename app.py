@@ -19,6 +19,10 @@ from db import (
     get_property_by_id,
     get_user,
     get_users,
+    get_broker,
+    add_broker,
+    edit_broker,
+    delete_broker_by_id
 )
 from db_setup import get_connection
 from fastapi import FastAPI, HTTPException
@@ -30,6 +34,8 @@ from schemas import (
     PropertyUpdate,
     UserCreate,
     UserUpdate,
+    BrokerCreate,
+    BrokerUpdate
 )
 
 app = FastAPI()
@@ -67,14 +73,6 @@ def create_user(user: UserCreate):
     user = add_user(conn, user)
     return {"user": user}
 
-@app.delete("/user/{user_id}")
-def delete_user_by_id(user_id: int):
-    conn = get_connection()
-    deleted = delete_user(conn, user_id)
-    if not deleted:
-        raise HTTPException(status_code=404, detail="User not found")
-    return {"message": f"User with id {user_id} has been deleted."}
-
 @app.put("/user/{user_id}")
 def update_user_by_id(user_id : int, user : UserUpdate):
     conn = get_connection()
@@ -82,6 +80,14 @@ def update_user_by_id(user_id : int, user : UserUpdate):
     if not updated:
             raise HTTPException(status_code=404, detail="user not found or nothing to update")
     return {"message": f"User with id {user_id} has been updated."}
+
+@app.delete("/user/{user_id}")
+def delete_user_by_id(user_id: int):
+    conn = get_connection()
+    deleted = delete_user(conn, user_id)
+    if not deleted:
+        raise HTTPException(status_code=404, detail="User not found")
+    return {"message": f"User with id {user_id} has been deleted."}
 
 
 # implementing property endpoints
@@ -166,6 +172,8 @@ def delete_agency(agency_id : int):
         raise HTTPException(status_code=404, detail="Agency not found")
     return {"message": f"Agency with id {agency_id} has been deleted."}
 
+# implementing brokers endpoints
+
 @app.get("/brokers/")
 def brokers():
     conn = get_connection()
@@ -174,3 +182,36 @@ def brokers():
         raise HTTPException(status_code=404, detail="No brokers found")
     return {"brokers" : brokers}
 
+@app.get("/broker/{broker_id}")
+def broker_by_id(broker_id : int):
+    conn = get_connection()
+    broker = get_broker(conn, broker_id)
+    if not broker:
+        raise HTTPException(status_code=404, detail="Broker not found")
+    return {"broker" : broker}
+
+@app.post("/broker/")
+def create_broker(broker: BrokerCreate):
+    conn = get_connection()
+    broker = add_broker(conn, broker)
+    if not broker:
+        raise HTTPException(status_code=404, detail="Broker not added")
+    return {"broker" : broker}
+
+@app.put("/broker/{broker_id}")
+def update_broker(broker_id : int, broker : BrokerUpdate):
+    conn = get_connection()
+    updated = edit_broker(conn, broker_id, broker)
+    if not updated:
+        raise HTTPException(status_code=404, detail="Broker not found or nothing to update")
+    return {"message": f"Broker with id {broker_id} has been updated."}
+
+@app.delete("/broker/{broker_id}")
+def delete_broker(broker_id : int):
+    conn = get_connection()
+    deleted = delete_broker_by_id(conn, broker_id)
+    if not deleted:
+        raise HTTPException(status_code=404, detail="Broker not found")
+    return {"message": f"Broker with id {broker_id} has been deleted."}
+
+@app.post("/")

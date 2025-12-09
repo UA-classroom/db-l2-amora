@@ -91,7 +91,24 @@ class AgencyCreate(BaseModel):
     history : str
 
 class AgencyUpdate(BaseModel):
-    user_id: int 
     organization_number: int | None = None
     history : str | None = None
 
+class BrokerCreate(BaseModel):
+    user_id: int
+    agency_id: int | None = None
+    license_number: str 
+    years_of_experience: int
+    bio: str 
+    
+class BrokerUpdate(BaseModel):
+    agency_id: int | None = None
+    license_number: str | None = None
+    years_of_experience: int | None = None
+    bio: str | None = None
+
+class ListingCreate(BaseModel):
+    property_id: int
+    listing_date: str
+    price: int
+    status: str
