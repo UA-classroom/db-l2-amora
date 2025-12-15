@@ -109,6 +109,37 @@ class BrokerUpdate(BaseModel):
 
 class ListingCreate(BaseModel):
     property_id: int
-    listing_date: str
-    price: int
+    user_id: int | None = None
+    broker_id: int | None = None
+    start_date: str | None = None
+    end_date: str 
+    listing_status: str
+    
+class UpdateStatus(BaseModel):
+    listing_status: str
+    
+class CreateBid(BaseModel):
+    user_id: int
+    property_id: int
+    bid_amount: int
+    
+class CreatOffer(BaseModel):
+    user_id: int
+    property_id: int
+    offer_amount: int
     status: str
+    message: str | None = None
+    
+class CreateFavorite(BaseModel):
+    user_id : int
+    property_id : int
+    notes : str | None = None
+    is_contacted : bool
+    notify_price_change : bool
+    notify_status_change : bool
+    notify_new_message : bool
+
+class CreatePriceHistory(BaseModel):
+    property_id : int
+    end_price : int
+

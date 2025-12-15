@@ -131,7 +131,7 @@ def create_tables():
         start_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         end_date TIMESTAMP,
         listing_status VARCHAR(100) DEFAULT 'Active' NOT NULL,
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         CHECK (user_id IS NOT NULL OR broker_id IS NOT NULL)
         )""")
 
@@ -207,7 +207,7 @@ def create_tables():
         favorite_id INT REFERENCES favorites(id) ON DELETE CASCADE,
         title VARCHAR(50) NOT NULL,
         message VARCHAR(100) NOT NULL,
-        is_read BOOLEAN NOT NULL,
+        is_read BOOLEAN NOT NULL DEFAULT FALSE,
         type VARCHAR(50) NOT NULL,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )""")
