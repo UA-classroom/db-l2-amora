@@ -24,24 +24,10 @@ class UserUpdate(BaseModel):
     
 class PropertyCreate(BaseModel):
     user_id: int
-    title: str
-    description: str
     property_type: str
-    listing_type: str
-    start_price: int
-    end_price: int | None = None
-    status: str | None = 'Active'
-
 class PropertyUpdate(BaseModel):
-    user_id: int | None = None
-    title: str | None = None
-    description: str | None = None
-    property_type: str | None = None
-    listing_type: str | None = None
-    start_price: int | None = None
-    end_price: int | None = None
-    status: str | None = None
-    
+    property_type: str
+
 class FeatureCreate(BaseModel):
     rooms: int
     bathrooms: int
@@ -91,6 +77,7 @@ class AgencyCreate(BaseModel):
     history : str
 
 class AgencyUpdate(BaseModel):
+    user_id: int | None = None
     organization_number: int | None = None
     history : str | None = None
 
@@ -109,12 +96,16 @@ class BrokerUpdate(BaseModel):
 
 class ListingCreate(BaseModel):
     property_id: int
-    user_id: int | None = None
+    property_owner_id: int | None = None
     broker_id: int | None = None
+    title: str
+    description: str
+    start_price: int
     start_date: str | None = None
     end_date: str 
     listing_status: str
-    
+    listing_type: str
+
 class UpdateStatus(BaseModel):
     listing_status: str
     
@@ -143,3 +134,17 @@ class CreatePriceHistory(BaseModel):
     property_id : int
     end_price : int
 
+class RecordView(BaseModel):
+    user_id : int
+    property_id : int
+    
+class CreateComparisonList(BaseModel):
+    user_id : int
+    name : str
+    
+class AddToComparisonList(BaseModel):
+    comparison_list_id : int
+    property_id : int
+    
+class ComparisonListUpdate(BaseModel):
+    name: str

@@ -1,5 +1,4 @@
 import os
-from re import U
 
 import psycopg2
 from db import (
@@ -9,12 +8,17 @@ from db import (
     add_property,
     add_user,
     bid_on_property,
+    compare_properties,
+    create_comparison_list,
     delete_agency_by_id,
     delete_broker_by_id,
+    delete_comparison_list,
+    delete_notification,
     delete_property,
     delete_user,
     edit_agency,
     edit_broker,
+    edit_comparison_list,
     edit_property,
     edit_user,
     get_agencies,
@@ -22,42 +26,49 @@ from db import (
     get_bids_for_property,
     get_broker,
     get_brokers,
+    get_comparison_list_by_id,
+    get_comparison_list_items,
     get_favorite_properties,
     get_listings,
+    get_notifications,
     get_offers_for_property,
+    get_price_history,
     get_properties,
     get_property_by_id,
+    get_property_views,
     get_user,
     get_users,
     listing_property,
     make_offer,
+    mark_notification_as_read,
+    record_price_history,
+    record_property_view,
+    remove_from_comparison,
+    unfavorite_property,
     unlist_property,
     update_listing_status,
-    unfavorite_property,
-    get_price_history,
-    record_price_history,
-    get_notifications,
-    
 )
 from db_setup import get_connection
 from fastapi import FastAPI, HTTPException, status
-from pydantic import BaseModel
 from schemas import (
+    AddToComparisonList,
     AgencyCreate,
     AgencyUpdate,
     BrokerCreate,
     BrokerUpdate,
+    ComparisonListUpdate,
     CreateBid,
+    CreateComparisonList,
     CreateFavorite,
+    CreatePriceHistory,
     CreatOffer,
     ListingCreate,
     PropertyFullCreate,
     PropertyUpdate,
+    RecordView,
     UpdateStatus,
     UserCreate,
     UserUpdate,
-    CreatePriceHistory,
-    
 )
 
 app = FastAPI()
@@ -78,21 +89,28 @@ but will have different HTTP-verbs.
 
 # implementing user endpoints
 @app.get("/users/")
-def users():
+def users(limit: int = 20,
+    offset: int = 0):
     conn = get_connection()
-    users = get_users(conn)
+    users = get_users(conn, limit, offset)
+    if not users:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="No users found")
     return {"users": users}
 
 @app.get("/user/{user_id}")
 def user(user_id: int):
     conn = get_connection()
     user = get_user(conn, user_id)
+    if not user:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
     return {"user": user}
 
 @app.post("/user/")
 def create_user(user: UserCreate):
     conn = get_connection()
     user = add_user(conn, user)
+    if not user:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not added")
     return {"user": user}
 
 @app.put("/user/{user_id}")
@@ -114,34 +132,32 @@ def delete_user_by_id(user_id: int):
 
 # implementing property endpoints
 @app.get("/properties/")
-def properties():
-    properties = get_properties(get_connection())
+def properties(limit: int = 20,
+    offset: int = 0):
+    properties = get_properties(get_connection(), limit, offset)
+    if not properties:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="No properties found")
     return {"properties": properties}
 
 @app.get("/property/{property_id}")
 def property(property_id: int):
     property = get_property_by_id(get_connection(), property_id)
+    if not property:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Property not found")
     return {"property": property}
 
 @app.post("/property/")
 def create_property(data: PropertyFullCreate):
     conn = get_connection()
-    user = get_user(conn, data.property.user_id)
-    if not user:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
-    try:
-        property_data = add_property(conn, data.property, data.features, data.location, data.images, data.videos)
-    except HTTPException:
-        raise
-    except Exception as e:
-        print(f"ERROR: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+    property_data = add_property(conn, data.property, data.features, data.location, data.images, data.videos)
+    if not property_data:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Property not added")
     return {"property": property_data}
 
 @app.put("/property/{property_id}")
-def update_property_by_id(property_id : int, property : PropertyUpdate):
+def update_property_by_id(property_id : int, property_type : PropertyUpdate):
     conn = get_connection()
-    updated = edit_property(conn, property_id, property)
+    updated = edit_property(conn, property_id, property_type)
     if not updated:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="property not found or nothing to update")
     return {"message": f"Property with id {property_id} has been updated."}
@@ -236,10 +252,13 @@ def delete_broker(broker_id : int):
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Broker not found")
     return {"message": f"Broker with id {broker_id} has been deleted."}
 
-@app.get("/property/list/")
-def property_listings():
+@app.get("/property/listings/")
+def property_listings(limit: int = 20,
+    offset: int = 0):
     conn = get_connection()
-    listings = get_listings(conn)
+    listings = get_listings(conn, limit, offset)
+    if not listings:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="No listings found")
     return {"listings": listings}
 
 @app.post("/property/listing/")
@@ -339,3 +358,87 @@ def notifications(user_id: int):
     conn = get_connection()
     notifications = get_notifications(conn, user_id)
     return {"notifications": notifications}
+
+@app.patch("/notification/read/{notification_id}")
+def read_notification(notification_id: int):
+    conn = get_connection()
+    updated = mark_notification_as_read(conn, notification_id)
+    if not updated:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Notification not found or already read")
+    return {"message": f"Notification with id {notification_id} has been marked as read."}
+
+@app.delete("/notification/{notification_id}")
+def delete_notification_by_id(notification_id: int):
+    conn = get_connection()
+    deleted = delete_notification(conn, notification_id)
+    if not deleted:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Notification not found")
+    return {"message": f"Notification with id {notification_id} has been deleted."}
+
+@app.get("/properties/views/{property_id}")
+def property_views(property_id: int):
+    conn = get_connection()
+    views = get_property_views(conn, property_id)
+    return {"views": views}
+
+@app.post("/property/view/")
+def record_view(data: RecordView):
+    conn = get_connection()
+    view_record = record_property_view(conn, data)
+    if not view_record:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Could not record property view")
+    return {"message": f"Property id {view_record['property_id']} view has been recorded."}
+
+@app.get("/comparison_list/{user_id}")
+def comparison_list(user_id: int):
+    conn = get_connection()
+    comparison_list = get_comparison_list_by_id(conn, user_id)
+    return {"comparison_list": comparison_list}
+
+@app.post("/comparison_list/")
+def add_comparison_list(data: CreateComparisonList):
+    conn = get_connection()
+    comparison_list = create_comparison_list(conn, data)
+    if not comparison_list:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Could not create comparison list")
+    return {"comparison_list" : comparison_list}
+
+@app.patch("/comparison_list/{list_id}")
+def update_comparison_list(list_id : int, data: ComparisonListUpdate):
+    conn = get_connection()
+    updated = edit_comparison_list(conn, list_id, data)
+    if not updated:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Comparison list not found or nothing to update")
+    return {"message": f"Comparison list with id {list_id} has been updated."}
+
+@app.delete("/comparison_list/{list_id}")
+def delete_comparison_list_by_id(list_id : int):
+    conn = get_connection()
+    deleted = delete_comparison_list(conn, list_id)
+    if not deleted:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Comparison list not found")
+    return {"message": f"Comparison list with id {list_id} has been deleted."}
+
+@app.get("/comparison_list/items/{list_id}")
+def comparison_list_items(list_id: int):
+    conn = get_connection()
+    items = get_comparison_list_items(conn, list_id)
+    if not items:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="No items found in this comparison list")
+    return {"items": items}
+
+@app.post("/comparison_list/compare/")
+def compare_list_properties(data:AddToComparisonList):
+    conn = get_connection()
+    comparison = compare_properties(conn, data)
+    if not comparison:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Could not compare properties")
+    return {"comparison": comparison}
+
+@app.delete("/comparison_list/remove/{list_id}/{property_id}")
+def remove_comparison_list_item(list_id : int, property_id : int):
+    conn = get_connection()
+    removed = remove_from_comparison(conn, list_id, property_id)
+    if not removed:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Comparison list item not found")
+    return {"message": f"Property with id {property_id} has been removed from comparison list {list_id}."}

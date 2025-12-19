@@ -1,13 +1,8 @@
 import os
-
 import psycopg2
 from dotenv import load_dotenv
 
 load_dotenv(override=True)
-
-DATABASE_NAME = os.getenv("DATABASE_NAME")
-PASSWORD = os.getenv("PASSWORD")
-
 
 def get_connection():
     """
@@ -17,11 +12,11 @@ def get_connection():
     someone hits one of our endpoints, which isn't great for performance
     """
     return psycopg2.connect(
-        dbname="testdb",
-        user="amr",  # change if needed
-        password="682354",
-        host="localhost",  # change if needed
-        port="5432",  # change if needed
+        dbname=os.getenv("DATABASE_NAME"),
+        user=os.getenv("DATABASE_USER"),
+        password=os.getenv("DATABASE_PASSWORD"),
+        host=os.getenv("DATABASE_HOST", "localhost"),
+        port=os.getenv("DATABASE_PORT", "5432"),
     )
 
 
@@ -29,35 +24,30 @@ def create_tables():
     """
     A function to create the necessary tables for the project. 
     """
+    cursor = None
+    connection = None
     try:
         connection = get_connection()
         cursor = connection.cursor()
 
-        cursor.execute("""CREATE TABLE users (
+        cursor.execute("""CREATE TABLE IF NOT EXISTS users (
         id SERIAL PRIMARY KEY,
         full_name VARCHAR(100) NOT NULL,
         email VARCHAR(100) UNIQUE NOT NULL, 
-        phone_number VARCHAR(20) NOT NULL,
+        phone_number VARCHAR(20) UNIQUE NOT NULL,
         password VARCHAR(100) NOT NULL,
         role VARCHAR(100) NOT NULL,
         profile_picture VARCHAR(100),
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )""")
 
-        cursor.execute("""CREATE TABLE properties (
+        cursor.execute("""CREATE TABLE IF NOT EXISTS properties (
         id SERIAL PRIMARY KEY,
-        user_id INT REFERENCES users(id) ON DELETE RESTRICT,
-        title VARCHAR(100) NOT NULL,
-        description TEXT NOT NULL,
         property_type VARCHAR(100) NOT NULL,
-        listing_type VARCHAR(100) NOT NULL,
-        start_price INT NOT NULL,
-        end_price INT,
-        status VARCHAR(100) DEFAULT 'Active' NOT NULL,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )""")
-
-        cursor.execute("""CREATE TABLE features (
+        
+        cursor.execute("""CREATE TABLE IF NOT EXISTS features (
         property_id INT PRIMARY KEY REFERENCES properties(id) ON DELETE CASCADE,
         rooms INT NOT NULL,
         bathrooms INT NOT NULL,
@@ -78,7 +68,7 @@ def create_tables():
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )""")
 
-        cursor.execute("""CREATE TABLE location (
+        cursor.execute("""CREATE TABLE IF NOT EXISTS location (
         property_id INT PRIMARY KEY REFERENCES properties(id) ON DELETE CASCADE,
         address VARCHAR(100) NOT NULL,
         city VARCHAR(100) NOT NULL,
@@ -92,29 +82,29 @@ def create_tables():
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )""")
 
-        cursor.execute("""CREATE TABLE property_images (
+        cursor.execute("""CREATE TABLE IF NOT EXISTS property_images (
         id SERIAL PRIMARY KEY,
         property_id INT REFERENCES properties(id) ON DELETE CASCADE,
         image_url VARCHAR(100) NOT NULL,
         image_order INT NOT NULL
         )""")
 
-        cursor.execute("""CREATE TABLE property_videos (
+        cursor.execute("""CREATE TABLE IF NOT EXISTS property_videos (
         id SERIAL PRIMARY KEY,
         property_id INT REFERENCES properties(id) ON DELETE CASCADE,
         video_url VARCHAR(100) NOT NULL,
         video_order INT NOT NULL
         )""")
 
-        cursor.execute("""CREATE TABLE agencies (
+        cursor.execute("""CREATE TABLE IF NOT EXISTS agencies (
         id SERIAL PRIMARY KEY,
         user_id INT REFERENCES users(id) ON DELETE RESTRICT,
-        organization_number INT NOT NULL,
+        organization_number VARCHAR(100) UNIQUE NOT NULL,
         history TEXT,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )""")
 
-        cursor.execute("""CREATE TABLE brokers (
+        cursor.execute("""CREATE TABLE IF NOT EXISTS brokers (
         user_id INT PRIMARY KEY REFERENCES users(id) ON DELETE RESTRICT,
         agency_id INT REFERENCES agencies(id),
         license_number VARCHAR(100) NOT NULL,
@@ -122,33 +112,65 @@ def create_tables():
         bio TEXT NOT NULL,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )""")
+        
+        cursor.execute("""CREATE TABLE IF NOT EXISTS property_owner(
+        user_id INT REFERENCES users(id) ON DELETE RESTRICT,
+        property_id INT REFERENCES properties(id) ON DELETE CASCADE,
+        registered_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        PRIMARY KEY (user_id, property_id)
+        )""")
 
-        cursor.execute("""CREATE TABLE listing(
+        cursor.execute("""
+        CREATE TABLE IF NOT EXISTS listing_property (
         id SERIAL PRIMARY KEY,
         property_id INT REFERENCES properties(id) ON DELETE CASCADE,
-        user_id INT REFERENCES users(id),
+        property_owner_id INT REFERENCES users(id),
         broker_id INT REFERENCES brokers(user_id),
+        title VARCHAR(100) NOT NULL,
+        description TEXT NOT NULL,
         start_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         end_date TIMESTAMP,
         listing_status VARCHAR(100) DEFAULT 'Active' NOT NULL,
+        listing_type VARCHAR(100) NOT NULL,
+        start_price INT NOT NULL,
+        end_price INT,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        CHECK (user_id IS NOT NULL OR broker_id IS NOT NULL)
-        )""")
+        CHECK (
+        (property_owner_id IS NOT NULL AND broker_id IS NULL)
+        OR
+        (property_owner_id IS NULL AND broker_id IS NOT NULL)
+        )
+        );
+        """)
+        
+        cursor.execute("""
+        CREATE UNIQUE INDEX IF NOT EXISTS one_active_listing_per_broker_property
+        ON listing_property(property_id, broker_id)
+        WHERE broker_id IS NOT NULL
+        AND listing_status = 'Active';
+        """)
+        
+        cursor.execute("""
+        CREATE UNIQUE INDEX IF NOT EXISTS one_active_listing_per_owner
+        ON listing_property(property_owner_id)
+        WHERE property_owner_id IS NOT NULL
+        AND listing_status = 'Active';
+        """)
 
-        cursor.execute("""CREATE TABLE property_brokers (
+        cursor.execute("""CREATE TABLE IF NOT EXISTS property_brokers (
         property_id INT REFERENCES properties(id) ON DELETE CASCADE,
         broker_id INT REFERENCES brokers(user_id) ON DELETE CASCADE,
         PRIMARY KEY (property_id, broker_id)
         )""")
 
-        cursor.execute("""CREATE TABLE property_views(
+        cursor.execute("""CREATE TABLE IF NOT EXISTS property_views(
         id SERIAL PRIMARY KEY,
         property_id INT REFERENCES properties(id) ON DELETE CASCADE,
         user_id INT REFERENCES users(id),
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP        
         )""")
 
-        cursor.execute("""CREATE TABLE interested_buyers(
+        cursor.execute("""CREATE TABLE IF NOT EXISTS interested_buyers(
         user_id INT REFERENCES users(id) ON DELETE RESTRICT,
         property_id INT REFERENCES properties(id) ON DELETE CASCADE,
         is_contacted BOOLEAN NOT NULL,
@@ -156,14 +178,7 @@ def create_tables():
         PRIMARY KEY (user_id, property_id)
         )""")
 
-        cursor.execute("""CREATE TABLE property_owners(
-        user_id INT REFERENCES users(id) ON DELETE RESTRICT,
-        property_id INT REFERENCES properties(id) ON DELETE CASCADE,
-        registered_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        PRIMARY KEY (user_id, property_id)
-        )""")
-
-        cursor.execute("""CREATE TABLE bids(
+        cursor.execute("""CREATE TABLE IF NOT EXISTS bids(
         id SERIAL PRIMARY KEY,
         property_id INT REFERENCES properties(id) ON DELETE CASCADE,
         user_id INT REFERENCES users(id) ON DELETE SET NULL,
@@ -171,24 +186,24 @@ def create_tables():
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )""")
 
-        cursor.execute("""CREATE TABLE offers(
+        cursor.execute("""CREATE TABLE IF NOT EXISTS offers(
         id SERIAL PRIMARY KEY,
         property_id INT REFERENCES properties(id) ON DELETE CASCADE,
         user_id INT REFERENCES users(id) ON DELETE SET NULL,
         offer_amount INT NOT NULL,
         message VARCHAR(100),
-        status VARCHAR(100) NOT NULL,
+        status VARCHAR(100) NOT NULL DEFAULT 'Pending',
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )""")
 
-        cursor.execute("""CREATE TABLE price_history(
+        cursor.execute("""CREATE TABLE IF NOT EXISTS price_history(
         id SERIAL PRIMARY KEY,
         property_id INT REFERENCES properties(id) ON DELETE CASCADE,
         end_price INT NOT NULL,
         record_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )""")
 
-        cursor.execute("""CREATE TABLE favorites(
+        cursor.execute("""CREATE TABLE IF NOT EXISTS favorites(
         id SERIAL PRIMARY KEY,
         property_id INT REFERENCES properties(id) ON DELETE CASCADE,
         user_id INT REFERENCES users(id) ON DELETE CASCADE,
@@ -199,8 +214,13 @@ def create_tables():
         notify_new_message BOOLEAN NOT NULL,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )""")
+        
+        cursor.execute("""
+        CREATE INDEX IF NOT EXISTS idx_favorites_user_id 
+        ON favorites(user_id);
+        """)
 
-        cursor.execute("""CREATE TABLE notifications(
+        cursor.execute("""CREATE TABLE IF NOT EXISTS notifications(
         id SERIAL PRIMARY KEY,
         user_id INT REFERENCES users(id) ON DELETE CASCADE,
         property_id INT REFERENCES properties(id) ON DELETE CASCADE,
@@ -212,14 +232,14 @@ def create_tables():
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )""")
 
-        cursor.execute("""CREATE TABLE comparison_lists(
+        cursor.execute("""CREATE TABLE IF NOT EXISTS comparison_lists(
         id SERIAL PRIMARY KEY,
         user_id INT REFERENCES users(id) ON DELETE CASCADE,
         name VARCHAR(100) NOT NULL,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )""")
 
-        cursor.execute("""CREATE TABLE comparison_list_items(
+        cursor.execute("""CREATE TABLE IF NOT EXISTS comparison_list_items(
         comparison_list_id INT REFERENCES comparison_lists(id) ON DELETE CASCADE,
         property_id INT REFERENCES properties(id) ON DELETE CASCADE,
         PRIMARY KEY (comparison_list_id, property_id)
@@ -231,8 +251,10 @@ def create_tables():
     except Exception as e:
         print(f"An error occurred: {e}")
     finally:
-        cursor.close()
-        connection.close()
+        if cursor:
+            cursor.close()
+        if connection:
+            connection.close()
 
 
 if __name__ == "__main__":
